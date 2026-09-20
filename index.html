@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Extreme Cut Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* slate-900 */
+            color: #f8fafc; /* slate-50 */
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Custom scrollbar for history */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 10px;
+        }
+
+        .tab-active {
+            border-bottom: 2px solid #ef4444; /* red-500 */
+            color: #ef4444;
+        }
+        
+        .toast-enter {
+            transform: translateY(100%);
+            opacity: 0;
+        }
+        .toast-enter-active {
+            transform: translateY(0);
+            opacity: 1;
+            transition: all 300ms ease-in-out;
+        }
+        .toast-exit {
+            transform: translateY(100%);
+            opacity: 0;
+            transition: all 300ms ease-in-out;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-slate-800 p-4 shadow-md flex justify-between items-center z-10">
+        <div>
+            <h1 class="text-xl font-extrabold tracking-tight text-white uppercase"><span class="text-red-500">Cut</span> Protocol</h1>
+            <p class="text-xs text-slate-400" id="user-status">Connecting...</p>
+        </div>
+        <div class="flex space-x-2">
+            <button onclick="switchTab('workout')" id="tab-workout" class="px-3 py-2 text-sm font-semibold tab-active transition-colors">Workout</button>
+            <button onclick="switchTab('history')" id="tab-history" class="px-3 py-2 text-sm font-semibold text-slate-400 transition-colors">History</button>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto relative pb-20" id="main-container">
+        
+        <!-- Workout Tab -->
+        <div id="view-workout" class="p-4 space-y-6 block">
+            
+            <!-- Week and Day Selectors -->
+            <div class="space-y-4 bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Select Week</label>
+                    <div class="flex space-x-2">
+                        <button onclick="setWeek(1)" class="week-btn flex-1 py-2 rounded bg-slate-700 text-sm font-bold active-week transition-colors">W1</button>
+                        <button onclick="setWeek(2)" class="week-btn flex-1 py-2 rounded bg-slate-700 text-sm font-bold transition-colors">W2</button>
+                        <button onclick="setWeek(3)" class="week-btn flex-1 py-2 rounded bg-slate-700 text-sm font-bold transition-colors">W3</button>
+                        <button onclick="setWeek(4)" class="week-btn flex-1 py-2 rounded bg-slate-700 text-sm font-bold transition-colors">W4</button>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Select Day</label>
+                    <select id="day-selector" onchange="setDay(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded p-3 text-white focus:outline-none focus:border-red-500 font-semibold appearance-none">
+                        <option value="Monday">Monday (Heavy Upper)</option>
+                        <option value="Tuesday">Tuesday (Heavy Lower)</option>
+                        <option value="Wednesday">Wednesday (Active Recovery)</option>
+                        <option value="Thursday">Thursday (Hyper Upper)</option>
+                        <option value="Friday">Friday (Hyper Lower)</option>
+                        <option value="Saturday">Saturday (Circuit)</option>
+                        <option value="Sunday">Sunday (Rest)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Exercises Container -->
+            <div id="exercises-container" class="space-y-4">
+                <!-- Dynamically populated via JS -->
+            </div>
+            
+            <div class="text-center pb-8 pt-4">
+                <p class="text-xs text-slate-500 italic">Push hard. Log accurately. Survive.</p>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="view-history" class="p-4 hidden">
+            <div class="bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 mb-4">
+                <h2 class="text-lg font-bold mb-1">Progression Log</h2>
+                <p class="text-xs text-slate-400 mb-4">Track your lifts across the 4-week protocol.</p>
+                
+                <div class="mb-4">
+                    <select id="history-exercise-filter" onchange="renderHistory()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white focus:outline-none focus:border-red-500 appearance-none">
+                        <option value="all">All Exercises</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+
+                <div id="history-container" class="space-y-4">
+                    <!-- Dynamically populated via JS -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-800 border border-green-500 text-green-400 px-6 py-3 rounded-full shadow-2xl flex items-center space-x-2 text-sm font-bold z-50 transition-all duration-300 opacity-0 pointer-events-none translate-y-10">
+        <i class="fas fa-check-circle"></i>
+        <span id="toast-message">Saved successfully</span>
+    </div>
+
+    <!-- Error Modal -->
+    <div id="error-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 hidden">
+        <div class="bg-slate-800 p-6 rounded-xl border border-red-500 max-w-sm w-full mx-4 shadow-2xl">
+            <h3 class="text-red-500 font-bold text-lg mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Error</h3>
+            <p id="error-msg" class="text-slate-300 text-sm mb-6">Something went wrong.</p>
+            <button onclick="closeError()" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded transition-colors">Dismiss</button>
+        </div>
+    </div>
+
+    <!-- Video Modal -->
+    <div id="video-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 hidden p-4">
+        <div class="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-2xl shadow-2xl flex flex-col overflow-hidden">
+            <div class="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-900">
+                <h3 id="video-title" class="font-bold text-white text-lg flex items-center"><i class="fab fa-youtube text-red-500 mr-2"></i> <span>Exercise</span></h3>
+                <button onclick="closeVideo()" class="text-slate-400 hover:text-white transition-colors p-2">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="relative w-full bg-black" style="padding-bottom: 56.25%;">
+                <iframe id="video-iframe" class="absolute top-0 left-0 w-full h-full" src="" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Environment variables setup
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'extreme-cut-app-v1';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        let initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth, currentUserId;
+        let workoutLogs = []; // In-memory store for all logs
+
+        // App State
+        let currentWeek = 1;
+        let currentDay = 'Monday';
+
+        // PROGRAM DEFINITION
+        const PROGRAM = {
+            Monday: [
+                { id: 'bench_press', name: 'Flat Bench Press', sets: '4 sets of 5-8 reps', type: 'weight', videoId: 'rxD321l2svE' },
+                { id: 'bb_rows', name: 'Barbell Rows', sets: '4 sets of 5-8 reps', type: 'weight', videoId: '9efgcAjQe7E' },
+                { id: 'db_press', name: 'Seated DB Press', sets: '3 sets of 8-10 reps', type: 'weight', videoId: 'qEwKCR5JCog' },
+                { id: 'lat_pulls', name: 'Lat Pulldowns', sets: '3 sets of 8-10 reps', type: 'weight', videoId: 'CAwf7n6Luuc' },
+                { id: 'bicep_curls', name: 'Bicep Curls', sets: '3 sets of 10-12 reps', type: 'weight', videoId: 'ykJmrZ5v0Oo' },
+                { id: 'tricep_push', name: 'Tricep Pushdowns', sets: '3 sets of 10-12 reps', type: 'weight', videoId: '2-LAMcpzODU' },
+                { id: 'liss_45', name: '45 mins LISS Cardio', type: 'checkbox', videoId: null, instructions: '<strong>Goal:</strong> Zone 2 Heart Rate.<br/><strong>Method:</strong> Incline Treadmill (10-12% incline, 3 mph) or Stationary Bike.' }
+            ],
+            Tuesday: [
+                { id: 'leg_press', name: 'Leg Press or Squat', sets: '4 sets of 5-8 reps', type: 'weight', videoId: 'IZxyjW7OSvc' },
+                { id: 'rdl', name: 'Romanian Deadlifts', sets: '3 sets of 8-10 reps', type: 'weight', videoId: 'JCXUYuzwNrM' },
+                { id: 'leg_ext', name: 'Leg Extensions', sets: '3 sets of 10-12 reps', type: 'weight', videoId: 'YyvSfVjQeL0' },
+                { id: 'calf_raises', name: 'Calf Raises', sets: '3 sets of 12-15 reps', type: 'weight', videoId: '-M4-G8p8fmc' },
+                { id: 'hiit_20', name: '20 mins Low-Impact HIIT', type: 'checkbox', videoId: null, instructions: '<strong>Method:</strong> Assault Bike or Rower.<br/><strong>Protocol:</strong><br/>- 5 min warm-up<br/>- 10 Rounds: [20 seconds ALL OUT sprint, 40 seconds slow recovery]<br/>- 5 min cool-down.' }
+            ],
+            Wednesday: [
+                { id: 'active_walk', name: '60 min Active Recovery Walk', type: 'checkbox', videoId: null, instructions: '<strong>Goal:</strong> Fast-paced walk, keep heart rate in Zone 1 (easy conversation). No heavy exertion.' },
+                { id: 'mobility', name: '15 min Mobility / Foam Roll', type: 'checkbox', videoId: null }
+            ],
+            Thursday: [
+                { id: 'inc_db_press', name: 'Incline DB Press', sets: '3 sets of 10-12 reps', type: 'weight', videoId: '8iPEnn-ltC8' },
+                { id: 'seated_rows', name: 'Seated Cable Rows', sets: '3 sets of 10-12 reps', type: 'weight', videoId: 'GZbfZ033f74' },
+                { id: 'pec_deck', name: 'Pec Deck / Crossovers', sets: '3 sets of 12-15 reps', type: 'weight', videoId: 'eGjt4jcEA_k' },
+                { id: 'lat_raises', name: 'Lateral Raises', sets: '4 sets of 15 reps', type: 'weight', videoId: '3VcKaXpzqRo' },
+                { id: 'face_pulls', name: 'Face Pulls', sets: '3 sets of 15 reps', type: 'weight', videoId: 'V8d6XjgIGCE' },
+                { id: 'hammer_curls', name: 'Hammer Curls', sets: '3 sets of 12-15 reps', type: 'weight', videoId: 'zC3nLlEvin4' },
+                { id: 'oh_tricep', name: 'Overhead Tricep Ext.', sets: '3 sets of 12-15 reps', type: 'weight', videoId: 'nRiJVZDpdL0' },
+                { id: 'liss_45_thurs', name: '45 mins LISS Cardio', type: 'checkbox', videoId: null, instructions: '<strong>Goal:</strong> Zone 2 Heart Rate.<br/><strong>Method:</strong> Incline Treadmill (10-12% incline, 3 mph) or Stationary Bike.' }
+            ],
+            Friday: [
+                { id: 'goblet_squat', name: 'Goblet Squats', sets: '3 sets of 12-15 reps', type: 'weight', videoId: 'MeIiIdhgPqAC' },
+                { id: 'ham_curls', name: 'Hamstring Curls', sets: '3 sets of 12-15 reps', type: 'weight', videoId: 'F488k67BTNo' },
+                { id: 'lunges', name: 'Lunges / Split Squats', sets: '3 sets of 10-12 reps', type: 'weight', videoId: 'D7KaRcUTQeE' },
+                { id: 'leg_ext_burn', name: 'Leg Extensions (Burnout)', sets: '2 sets of 20 reps', type: 'weight', videoId: 'YyvSfVjQeL0' },
+                { id: 'calf_raises_fri', name: 'Calf Raises', sets: '3 sets of 15-20 reps', type: 'weight', videoId: '-M4-G8p8fmc' },
+                { id: 'hiit_20_fri', name: '20 mins Low-Impact HIIT', type: 'checkbox', videoId: null, instructions: '<strong>Method:</strong> Assault Bike or Rower.<br/><strong>Protocol:</strong><br/>- 5 min warm-up<br/>- 10 Rounds: [20 seconds ALL OUT sprint, 40 seconds slow recovery]<br/>- 5 min cool-down.' }
+            ],
+            Saturday: [
+                { id: 'circuit_thrusters', name: 'Dumbbell Thrusters', sets: '4 rounds x 12 reps', type: 'weight', videoId: 'L219ltL15zk' },
+                { id: 'circuit_rows', name: 'Bent-Over Rows', sets: '4 rounds x 12 reps', type: 'weight', videoId: '6TSOcaCnbAg' },
+                { id: 'circuit_pushups', name: 'Push-ups', sets: '4 rounds x 10-15 reps', type: 'checkbox', videoId: 'IODxDxX7oi4' }, 
+                { id: 'circuit_rdl', name: 'Dumbbell RDLs', sets: '4 rounds x 15 reps', type: 'weight', videoId: 'JCXUYuzwNrM' },
+                { id: 'circuit_plank', name: 'Plank (45s)', sets: '4 rounds', type: 'checkbox', videoId: 'pSHjTRCQxIw' },
+                { id: 'liss_45_sat', name: '45 mins LISS Cardio', type: 'checkbox', videoId: null, instructions: '<strong>Goal:</strong> Zone 2 Heart Rate.<br/><strong>Method:</strong> Incline Treadmill (10-12% incline, 3 mph) or Stationary Bike.' }
+            ],
+            Sunday: [
+                { id: 'rest_day', name: 'Complete Rest & Recovery', type: 'checkbox', videoId: null, instructions: '<strong>Goal:</strong> Zero strenuous activity. Let the central nervous system recover.' }
+            ]
+        };
+
+        async function initApp() {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    showError("Firebase configuration missing. Using local mode only.");
+                    setupLocalMode();
+                    return;
+                }
+
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                if (initialAuthToken) {
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } catch (e) {
+                        console.error("Custom token failed, falling back to anonymous", e);
+                        await signInAnonymously(auth);
+                    }
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUserId = user.uid;
+                        document.getElementById('user-status').innerHTML = `<i class="fas fa-user-check text-green-400 mr-1"></i> Active`;
+                        fetchLogs();
+                        populateHistoryFilter();
+                    } else {
+                        currentUserId = null;
+                        document.getElementById('user-status').innerHTML = `<i class="fas fa-user-times text-red-400 mr-1"></i> Disconnected`;
+                    }
+                });
+
+                // Set initial day based on real-world day if possible, else Monday
+                const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                const today = days[new Date().getDay()];
+                document.getElementById('day-selector').value = today;
+                currentDay = today;
+                
+                renderWorkoutView();
+
+            } catch (error) {
+                console.error("Initialization error:", error);
+                showError("Failed to initialize app.");
+            }
+        }
+
+        function setupLocalMode() {
+            // Fallback if no firebase config is provided by the environment
+            document.getElementById('user-status').innerHTML = "Offline Mode";
+            renderWorkoutView();
+        }
+
+        function fetchLogs() {
+            if (!currentUserId || !db) return;
+            
+            // RULE 1: Strict paths
+            const logsRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'workout_logs');
+            
+            // RULE 2: No complex queries. Fetch all and handle in memory.
+            onSnapshot(logsRef, (snapshot) => {
+                workoutLogs = [];
+                snapshot.forEach((doc) => {
+                    workoutLogs.push({ id: doc.id, ...doc.data() });
+                });
+                // Update UI if we are on a relevant view
+                renderWorkoutView(); 
+                if(!document.getElementById('view-history').classList.contains('hidden')){
+                    renderHistory();
+                }
+            }, (error) => {
+                console.error("Error fetching logs:", error);
+                showError("Could not sync your workout data.");
+            });
+        }
+
+        window.switchTab = function(tab) {
+            document.getElementById('view-workout').classList.add('hidden');
+            document.getElementById('view-history').classList.add('hidden');
+            
+            document.getElementById('tab-workout').classList.remove('tab-active', 'text-slate-400');
+            document.getElementById('tab-history').classList.remove('tab-active', 'text-slate-400');
+            
+            if (tab === 'workout') {
+                document.getElementById('view-workout').classList.remove('hidden');
+                document.getElementById('tab-workout').classList.add('tab-active');
+                document.getElementById('tab-history').classList.add('text-slate-400');
+                renderWorkoutView();
+            } else {
+                document.getElementById('view-history').classList.remove('hidden');
+                document.getElementById('tab-history').classList.add('tab-active');
+                document.getElementById('tab-workout').classList.add('text-slate-400');
+                renderHistory();
+            }
+        };
+
+        window.setWeek = function(week) {
+            currentWeek = week;
+            // Update button styles
+            const btns = document.querySelectorAll('.week-btn');
+            btns.forEach((btn, index) => {
+                if (index + 1 === week) {
+                    btn.classList.add('bg-red-600', 'text-white');
+                    btn.classList.remove('bg-slate-700', 'text-slate-300');
+                } else {
+                    btn.classList.remove('bg-red-600', 'text-white');
+                    btn.classList.add('bg-slate-700', 'text-slate-300');
+                }
+            });
+            renderWorkoutView();
+        };
+
+        window.setDay = function(day) {
+            currentDay = day;
+            renderWorkoutView();
+        };
+
+        function renderWorkoutView() {
+            const container = document.getElementById('exercises-container');
+            container.innerHTML = '';
+            
+            const dayExercises = PROGRAM[currentDay] || [];
+
+            if (dayExercises.length === 0) {
+                container.innerHTML = '<p class="text-slate-400 text-center py-8">No exercises logged for this day.</p>';
+                return;
+            }
+
+            dayExercises.forEach(ex => {
+                // Check if already logged for this week/day/exercise
+                const existingLog = workoutLogs.find(log => 
+                    log.week === currentWeek && 
+                    log.day === currentDay && 
+                    log.exerciseId === ex.id
+                );
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-800 p-4 rounded-xl border border-slate-700 shadow flex flex-col";
+                
+                const header = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <h3 class="font-bold text-white text-lg inline-flex items-center cursor-pointer hover:text-red-400 transition-colors ${ex.videoId ? 'underline underline-offset-4 decoration-slate-600 decoration-dotted' : ''}" 
+                                ${ex.videoId ? `onclick="openVideo('${ex.videoId}', '${ex.name}')"` : ''}>
+                                ${ex.name}
+                                ${ex.videoId ? '<i class="fab fa-youtube text-red-500 ml-2 text-sm drop-shadow-md"></i>' : ''}
+                            </h3>
+                            ${ex.sets ? `<p class="text-xs text-red-400 font-semibold uppercase tracking-wide mt-1">${ex.sets}</p>` : ''}
+                        </div>
+                        ${existingLog ? `<span class="bg-green-900 text-green-300 text-xs px-2 py-1 rounded font-bold border border-green-700 mt-1"><i class="fas fa-check mr-1"></i>Logged</span>` : ''}
+                    </div>
+                `;
+
+                let instructionsHtml = '';
+                if (ex.instructions) {
+                    instructionsHtml = `
+                        <div class="mb-4 bg-slate-900 rounded p-3 text-sm text-slate-300 border-l-4 border-red-500 shadow-inner">
+                            ${ex.instructions}
+                        </div>
+                    `;
+                }
+
+                let body = '';
+                if (ex.type === 'weight') {
+                    const defaultWeight = existingLog ? existingLog.weight : '';
+                    const defaultReps = existingLog ? existingLog.reps : '';
+                    
+                    body = `
+                        <div class="flex space-x-3 mb-4">
+                            <div class="flex-1">
+                                <label class="block text-xs text-slate-400 mb-1">Weight (kg/lbs)</label>
+                                <input type="number" id="weight-${ex.id}" inputmode="decimal" value="${defaultWeight}" class="w-full bg-slate-900 border ${existingLog ? 'border-green-700' : 'border-slate-600'} rounded p-2 text-white font-bold focus:border-red-500 focus:outline-none placeholder-slate-600" placeholder="0">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-xs text-slate-400 mb-1">Reps Achieved</label>
+                                <input type="number" id="reps-${ex.id}" inputmode="numeric" value="${defaultReps}" class="w-full bg-slate-900 border ${existingLog ? 'border-green-700' : 'border-slate-600'} rounded p-2 text-white font-bold focus:border-red-500 focus:outline-none placeholder-slate-600" placeholder="0">
+                            </div>
+                        </div>
+                        <button onclick="saveExerciseLog('${ex.id}', '${ex.name}', 'weight')" class="w-full ${existingLog ? 'bg-slate-700 hover:bg-slate-600 text-slate-300' : 'bg-red-600 hover:bg-red-700 text-white'} font-bold py-3 rounded-lg transition-colors flex items-center justify-center">
+                            ${existingLog ? '<i class="fas fa-edit mr-2"></i> Update Log' : '<i class="fas fa-save mr-2"></i> Save Set'}
+                        </button>
+                    `;
+                } else if (ex.type === 'checkbox') {
+                    body = `
+                        <button onclick="saveExerciseLog('${ex.id}', '${ex.name}', 'checkbox')" class="w-full ${existingLog ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'} font-bold py-4 rounded-lg transition-colors flex items-center justify-center border ${existingLog ? 'border-green-500' : 'border-slate-600'}">
+                            ${existingLog ? '<i class="fas fa-check-square mr-2 text-xl"></i> Completed' : '<i class="far fa-square mr-2 text-xl"></i> Mark Complete'}
+                        </button>
+                    `;
+                }
+
+                card.innerHTML = header + instructionsHtml + body;
+                container.appendChild(card);
+            });
+        }
+
+        window.saveExerciseLog = async function(exerciseId, exerciseName, type) {
+            if (!currentUserId || !db) {
+                showError("You must be connected to save logs.");
+                return;
+            }
+
+            let weight = null;
+            let reps = null;
+
+            if (type === 'weight') {
+                weight = document.getElementById(`weight-${exerciseId}`).value;
+                reps = document.getElementById(`reps-${exerciseId}`).value;
+                
+                if (!weight || !reps) {
+                    showError("Please enter both weight and reps.");
+                    return;
+                }
+            }
+
+            const logData = {
+                week: currentWeek,
+                day: currentDay,
+                exerciseId: exerciseId,
+                exerciseName: exerciseName,
+                type: type,
+                weight: type === 'weight' ? parseFloat(weight) : null,
+                reps: type === 'weight' ? parseInt(reps) : null,
+                completed: true,
+                timestamp: new Date().toISOString()
+            };
+
+            try {
+                // RULE 1: Strict paths
+                const logsRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'workout_logs');
+                
+                // We just append logs. Since it's a simple app, we fetch all and take the latest per week/day/ex
+                // For a production app we might update a specific doc, but adding docs is safer for "simple queries" rule.
+                await addDoc(logsRef, logData);
+                
+                showToast(`Saved ${exerciseName}`);
+                // Optimistic UI update not needed if onSnapshot is fast, but helps feeling responsive.
+                // onSnapshot will trigger re-render shortly.
+                
+            } catch (error) {
+                console.error("Error saving log:", error);
+                showError("Failed to save. Check your connection.");
+            }
+        };
+
+        function populateHistoryFilter() {
+            const filter = document.getElementById('history-exercise-filter');
+            const uniqueEx = new Set();
+            
+            // Gather all weight-based exercises from program
+            Object.values(PROGRAM).forEach(dayArr => {
+                dayArr.forEach(ex => {
+                    if(ex.type === 'weight') uniqueEx.add(JSON.stringify({id: ex.id, name: ex.name}));
+                });
+            });
+
+            Array.from(uniqueEx).map(str => JSON.parse(str)).forEach(ex => {
+                const opt = document.createElement('option');
+                opt.value = ex.id;
+                opt.textContent = ex.name;
+                filter.appendChild(opt);
+            });
+        }
+
+        window.renderHistory = function() {
+            const container = document.getElementById('history-container');
+            container.innerHTML = '';
+            
+            if (workoutLogs.length === 0) {
+                container.innerHTML = '<p class="text-slate-400 text-center py-4 text-sm">No data logged yet.</p>';
+                return;
+            }
+
+            const filterVal = document.getElementById('history-exercise-filter').value;
+            
+            // Process logs: Keep latest entry for a specific (week, exerciseId)
+            const processedLogs = {};
+            workoutLogs.forEach(log => {
+                if (log.type !== 'weight') return; // Only chart weights
+                if (filterVal !== 'all' && log.exerciseId !== filterVal) return;
+                
+                const key = `${log.exerciseId}_W${log.week}`;
+                
+                // Keep the most recent timestamp if multiple exist
+                if (!processedLogs[key] || new Date(log.timestamp) > new Date(processedLogs[key].timestamp)) {
+                    processedLogs[key] = log;
+                }
+            });
+
+            // Group by exercise for display
+            const groupedByEx = {};
+            Object.values(processedLogs).forEach(log => {
+                if (!groupedByEx[log.exerciseId]) {
+                    groupedByEx[log.exerciseId] = { name: log.exerciseName, logs: [] };
+                }
+                groupedByEx[log.exerciseId].logs.push(log);
+            });
+
+            if (Object.keys(groupedByEx).length === 0) {
+                 container.innerHTML = '<p class="text-slate-400 text-center py-4 text-sm">No weight data found for selection.</p>';
+                 return;
+            }
+
+            // Render groups
+            for (const exId in groupedByEx) {
+                const exData = groupedByEx[exId];
+                
+                // Sort logs by week
+                exData.logs.sort((a, b) => a.week - b.week);
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-900 border border-slate-700 rounded-lg overflow-hidden";
+                
+                let rowsHtml = '';
+                exData.logs.forEach(log => {
+                    rowsHtml += `
+                        <div class="flex justify-between items-center p-3 border-b border-slate-800 last:border-0">
+                            <span class="font-bold text-slate-300">Week ${log.week}</span>
+                            <div class="text-right">
+                                <span class="font-extrabold text-white text-lg">${log.weight}</span> <span class="text-xs text-slate-500">kg/lb</span>
+                                <span class="mx-2 text-slate-600">|</span>
+                                <span class="font-bold text-red-400">${log.reps}</span> <span class="text-xs text-slate-500">reps</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                card.innerHTML = `
+                    <div class="bg-slate-800 px-4 py-2 border-b border-slate-700">
+                        <h4 class="font-bold text-white text-sm">${exData.name}</h4>
+                    </div>
+                    <div class="flex flex-col">
+                        ${rowsHtml}
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+        };
+
+        let toastTimeout;
+        window.showToast = function(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = msg;
+            
+            toast.classList.remove('translate-y-10', 'opacity-0', 'pointer-events-none');
+            
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0', 'pointer-events-none');
+            }, 3000);
+        };
+
+        window.showError = function(msg) {
+            document.getElementById('error-msg').textContent = msg;
+            document.getElementById('error-modal').classList.remove('hidden');
+        };
+        
+        window.closeError = function() {
+            document.getElementById('error-modal').classList.add('hidden');
+        };
+
+        window.openVideo = function(videoId, name) {
+            if (!videoId || videoId === 'null') return;
+            document.getElementById('video-title').querySelector('span').textContent = name;
+            // Use autoplay=1 to immediately start the video when opened
+            document.getElementById('video-iframe').src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+            document.getElementById('video-modal').classList.remove('hidden');
+        };
+
+        window.closeVideo = function() {
+            // Clear the src to stop the video from playing in the background
+            document.getElementById('video-iframe').src = '';
+            document.getElementById('video-modal').classList.add('hidden');
+        };
+
+        // Initialize App on load
+        window.addEventListener('DOMContentLoaded', () => {
+            // Setup default week UI
+            setWeek(1);
+            initApp();
+        });
+
+    </script>
+</body>
+</html>
